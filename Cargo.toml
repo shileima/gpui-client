@@ -1,0 +1,10 @@
+[package]
+name = "gpui-client"
+version = "0.1.0"
+edition = "2021"
+description = "基于 GPUI 的完整功能桌面客户端"
+license = "MIT"
+
+[dependencies]
+gpui = "0.2.2"
+unicode-segmentation = "1.12"
