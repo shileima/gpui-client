@@ -2,9 +2,25 @@
 name = "gpui-client"
 version = "0.1.0"
 edition = "2021"
-description = "基于 GPUI 的完整功能桌面客户端"
+description = "基于 GPUI 的 AI 聊天桌面客户端"
 license = "MIT"
 
 [dependencies]
 gpui = "0.2.2"
 unicode-segmentation = "1.12"
+wry = "0.49"
+raw-window-handle = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+tiny_http = "0.12"
+dirs = "6"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+rust-embed = "8"
+mime_guess = "2"
+urlencoding = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2"

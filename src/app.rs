@@ -1,222 +1,101 @@
-use crate::components::TextInput;
-use crate::models::{AppState, Filter};
-use crate::views::{render_sidebar, TaskList};
+use std::sync::Arc;
+
 use gpui::{
-    App, Bounds, Context, Entity, Focusable, FontWeight, KeyBinding, Menu, MenuItem,
-    SharedString, SystemMenuType, TitlebarOptions, Window, WindowBounds, WindowHandle,
-    WindowOptions, actions, div, hsla, prelude::*, px, rgb, size,
+    App, Bounds, Context, KeyBinding, Menu, MenuItem, SharedString, SystemMenuType, TitlebarOptions,
+    Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowOptions, actions, div,
+    prelude::*, px, size, transparent_black,
 };
+
+use crate::config::AppConfig;
+use crate::webview::ChatWebView;
 
 actions!(
     gpui_client,
-    [Quit, ClearDone, NewTask, ToggleFilterAll, ToggleFilterActive, ToggleFilterDone]
+    [Quit, ReloadChat, ToggleDevTools]
 );
 
-pub struct MainWindow {
-    task_list: Entity<TaskList>,
-    text_input: Entity<TextInput>,
+pub struct ChatMainWindow {
+    pub webview: ChatWebView,
+    pub chat_url: String,
+    webview_ready: bool,
+    last_viewport_width: f32,
+    last_viewport_height: f32,
 }
 
-impl MainWindow {
-    fn new(cx: &mut Context<Self>) -> Self {
+impl ChatMainWindow {
+    fn new(chat_url: String) -> Self {
         Self {
-            task_list: cx.new(|cx| TaskList::new(cx)),
-            text_input: cx.new(|cx| TextInput::new("输入新任务，按 Enter 添加...", cx)),
+            webview: ChatWebView::new(),
+            chat_url,
+            webview_ready: false,
+            last_viewport_width: 0.0,
+            last_viewport_height: 0.0,
         }
     }
 
-    fn add_task_from_input(&mut self, cx: &mut Context<Self>) {
-        let title = self.text_input.read(cx).content().to_string();
-        if title.trim().is_empty() {
+    pub fn init_webview(&mut self, window: &mut Window) {
+        if self.webview_ready {
+            self.sync_webview_bounds(window);
             return;
         }
-        cx.global_mut::<AppState>().add_task(&title);
-        self.text_input.update(cx, |input, cx| {
-            input.set_content("", cx);
+
+        window.set_background_appearance(WindowBackgroundAppearance::Transparent);
+
+        match self.webview.ensure_created(window, &self.chat_url) {
+            Ok(()) => {
+                self.webview_ready = true;
+                self.sync_webview_bounds(window);
+                println!("[gpui-client] WebView 已加载: {}", self.chat_url);
+            }
+            Err(err) => eprintln!("[gpui-client] WebView 初始化失败: {err}"),
+        }
+    }
+
+    fn sync_webview_bounds(&mut self, window: &Window) {
+        let viewport = window.viewport_size();
+        let width = viewport.width / px(1.0);
+        let height = viewport.height / px(1.0);
+
+        if !self.webview_ready {
+            return;
+        }
+
+        if (width - self.last_viewport_width).abs() < 1.0
+            && (height - self.last_viewport_height).abs() < 1.0
+        {
+            return;
+        }
+
+        self.last_viewport_width = width;
+        self.last_viewport_height = height;
+        self.webview.sync_bounds(window);
+    }
+
+    pub fn init_webview_deferred(handle: WindowHandle<Self>, cx: &mut App) {
+        cx.defer(move |cx| {
+            handle
+                .update(cx, |view, window, _| {
+                    view.init_webview(window);
+                })
+                .ok();
         });
-        cx.notify();
-    }
-
-    pub fn focus_input(&self, window: &mut Window, cx: &App) {
-        window.focus(&self.text_input.read(cx).focus_handle(cx));
     }
 }
 
-impl Render for MainWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let active = cx.global::<AppState>().active_count();
-        let total = cx.global::<AppState>().tasks.len();
-        let done_count = cx.global::<AppState>().done_count();
-
-        div()
-            .flex()
-            .flex_col()
-            .size_full()
-            .bg(rgb(0xffffff))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px(px(20.))
-                    .py(px(14.))
-                    .border_b_1()
-                    .border_color(hsla(0., 0., 0., 0.08))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(hsla(0., 0., 0., 0.85))
-                                    .child("GPUI 任务客户端"),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(hsla(0., 0., 0., 0.45))
-                                    .child(format!("{active} 项待办 · 共 {total} 项")),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px(px(10.))
-                            .py(px(4.))
-                            .rounded_full()
-                            .bg(hsla(220. / 360., 0.5, 0.55, 0.12))
-                            .text_xs()
-                            .text_color(hsla(220. / 360., 0.6, 0.45, 1.))
-                            .child("GPUI 0.2"),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(render_sidebar(cx))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .overflow_hidden()
-                            .child(self.task_list.clone())
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .border_t_1()
-                                    .border_color(hsla(0., 0., 0., 0.08))
-                                    .bg(rgb(0xffffff))
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(12.))
-                                            .p(px(16.))
-                                            .child(
-                                                div()
-                                                    .flex_1()
-                                                    .flex()
-                                                    .items_center()
-                                                    .px(px(12.))
-                                                    .py(px(8.))
-                                                    .rounded_md()
-                                                    .border_1()
-                                                    .border_color(hsla(220. / 360., 0.4, 0.55, 0.3))
-                                                    .bg(hsla(220. / 360., 0.3, 0.98, 0.5))
-                                                    .child(self.text_input.clone()),
-                                            )
-                                            .child(
-                                                div()
-                                                    .px(px(16.))
-                                                    .py(px(8.))
-                                                    .rounded_md()
-                                                    .bg(hsla(220. / 360., 0.6, 0.5, 1.))
-                                                    .text_color(rgb(0xffffff))
-                                                    .text_sm()
-                                                    .cursor_pointer()
-                                                    .hover(|style| {
-                                                        style.bg(hsla(220. / 360., 0.65, 0.45, 1.))
-                                                    })
-                                                    .child("添加")
-                                                    .on_mouse_up(
-                                                        gpui::MouseButton::Left,
-                                                        cx.listener(|this, _, _, cx| {
-                                                            this.add_task_from_input(cx);
-                                                        }),
-                                                    ),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .justify_between()
-                                            .px(px(16.))
-                                            .pb(px(12.))
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(hsla(0., 0., 0., 0.4))
-                                                    .child(
-                                                        "快捷键: Enter 添加 · Cmd+N 聚焦输入 · Cmd+Q 退出",
-                                                    ),
-                                            )
-                                            .child(
-                                                div()
-                                                    .when(done_count > 0, |el| {
-                                                        el.child(
-                                                            div()
-                                                                .px(px(12.))
-                                                                .py(px(6.))
-                                                                .rounded_sm()
-                                                                .text_xs()
-                                                                .text_color(hsla(
-                                                                    0., 0.6, 0.45, 1.,
-                                                                ))
-                                                                .cursor_pointer()
-                                                                .hover(|style| {
-                                                                    style.bg(hsla(
-                                                                        0., 0.6, 0.5, 0.1,
-                                                                    ))
-                                                                })
-                                                                .child(format!(
-                                                                    "清除已完成 ({done_count})"
-                                                                ))
-                                                                .on_mouse_up(
-                                                                    gpui::MouseButton::Left,
-                                                                    |_, _, cx| {
-                                                                        cx.global_mut::<AppState>()
-                                                                            .clear_done();
-                                                                        cx.refresh_windows();
-                                                                    },
-                                                                ),
-                                                        )
-                                                    }),
-                                            ),
-                                    ),
-                            ),
-                    ),
-            )
+impl Render for ChatMainWindow {
+    fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        self.sync_webview_bounds(window);
+        // 透明占位，不遮挡 WebView
+        div().size_full().bg(transparent_black())
     }
 }
-
-actions!(main_window, [AddTaskFromInput]);
 
 pub fn set_app_menus(cx: &mut App) {
     cx.set_menus(vec![
         Menu {
             name: "文件".into(),
             items: vec![
-                MenuItem::action("新建任务", NewTask),
-                MenuItem::separator(),
-                MenuItem::action("清除已完成", ClearDone),
+                MenuItem::action("重新加载聊天", ReloadChat),
                 MenuItem::separator(),
                 MenuItem::os_submenu("服务", SystemMenuType::Services),
                 MenuItem::separator(),
@@ -225,81 +104,50 @@ pub fn set_app_menus(cx: &mut App) {
         },
         Menu {
             name: "视图".into(),
-            items: vec![
-                MenuItem::action("全部任务", ToggleFilterAll),
-                MenuItem::action("进行中", ToggleFilterActive),
-                MenuItem::action("已完成", ToggleFilterDone),
-            ],
+            items: vec![MenuItem::action("开发者工具", ToggleDevTools)],
         },
     ]);
 }
 
-pub fn open_main_window(cx: &mut App) -> WindowHandle<MainWindow> {
-    let bounds = Bounds::centered(None, size(px(960.), px(640.)), cx);
+pub fn open_main_window(cx: &mut App, chat_url: String) -> WindowHandle<ChatMainWindow> {
+    let bounds = Bounds::centered(None, size(px(1280.), px(860.)), cx);
     cx.open_window(
         WindowOptions {
             titlebar: Some(TitlebarOptions {
-                title: Some(SharedString::from("GPUI 任务客户端")),
+                title: Some(SharedString::from("GPUI AI 聊天")),
                 ..Default::default()
             }),
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             focus: true,
             ..Default::default()
         },
-        |_, cx| cx.new(|cx| MainWindow::new(cx)),
+        move |_, cx| cx.new(|_| ChatMainWindow::new(chat_url.clone())),
     )
     .unwrap()
 }
 
-pub fn register_actions(cx: &mut App, window: WindowHandle<MainWindow>) {
+pub fn register_actions(cx: &mut App, window: WindowHandle<ChatMainWindow>, _config: Arc<AppConfig>) {
     cx.bind_keys([
         KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("backspace", crate::components::text_input::Backspace, None),
-        KeyBinding::new("delete", crate::components::text_input::Delete, None),
-        KeyBinding::new("enter", AddTaskFromInput, Some("TextInput")),
-        KeyBinding::new("cmd-backspace", ClearDone, None),
-        KeyBinding::new("cmd-n", NewTask, None),
+        KeyBinding::new("cmd-r", ReloadChat, None),
+        KeyBinding::new("cmd-shift-i", ToggleDevTools, None),
     ]);
 
     cx.on_action(|_: &Quit, cx| cx.quit());
 
-    cx.on_action(|_: &ClearDone, cx| {
-        cx.global_mut::<AppState>().clear_done();
-        cx.refresh_windows();
-    });
-
     cx.on_action({
-        move |_: &NewTask, cx| {
+        move |_: &ReloadChat, cx| {
             window
-                .update(cx, |view, window, cx| {
-                    view.focus_input(window, cx);
+                .update(cx, |view, _, _| {
+                    view.webview.reload();
                 })
                 .ok();
         }
     });
 
-    cx.on_action(|_: &ToggleFilterAll, cx| {
-        cx.global_mut::<AppState>().set_filter(Filter::All);
-        cx.refresh_windows();
-    });
-
-    cx.on_action(|_: &ToggleFilterActive, cx| {
-        cx.global_mut::<AppState>().set_filter(Filter::Active);
-        cx.refresh_windows();
-    });
-
-    cx.on_action(|_: &ToggleFilterDone, cx| {
-        cx.global_mut::<AppState>().set_filter(Filter::Done);
-        cx.refresh_windows();
-    });
-
     cx.on_action({
-        move |_: &AddTaskFromInput, cx| {
-            window
-                .update(cx, |view, _, cx| {
-                    view.add_task_from_input(cx);
-                })
-                .ok();
+        move |_: &ToggleDevTools, _cx| {
+            println!("[gpui-client] 开发者工具请在 WebView 内使用右键检查");
         }
     });
 }

@@ -1,0 +1,122 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #f5f7fb;
+}
+
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.chat-home,
+.chat-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-home__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px 8px;
+}
+
+.chat-home__header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.chat-home__header p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.chat-home__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+  padding: 0 24px 24px;
+}
+
+.chat-home__compose {
+  width: 100%;
+  max-width: 848px;
+  margin: 0 auto;
+  min-width: 576px;
+}
+
+.chat-home__dialog,
+.chat-home__dialog > div,
+.chat-home__dialog #aichat-dynamic-dialog-box {
+  width: 100%;
+}
+
+.chat-home__status {
+  padding: 12px 24px 20px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.chat-detail__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fff;
+}
+
+.chat-detail__toolbar button {
+  border: none;
+  background: transparent;
+  color: #175cd3;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.chat-detail__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  padding-bottom: 20px;
+  box-sizing: border-box;
+}
+
+.chat-detail__module {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* aichat chatExt 默认 100vh，在嵌套容器内会裁切底部输入框 */
+.chat-detail__module > div {
+  height: 100% !important;
+  max-height: 100%;
+}
